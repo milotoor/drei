@@ -9,7 +9,7 @@ import { easing } from 'maath'
 export type ScrollControlsProps = {
   /** Precision, default 0.00001 */
   eps?: number
-  /** Horontal scroll, default false (vertical) */
+  /** Horizontal scroll, default false (vertical) */
   horizontal?: boolean
   /** Infinite scroll, default false (experimental!) */
   infinite?: boolean
@@ -24,6 +24,8 @@ export type ScrollControlsProps = {
    *  then a maxSpeed of e.g. 3 which will clamp the speed to 3 units per second, it may now
    *  take much longer than damping to reach the target if it is far away. Default: Infinity */
   maxSpeed?: number
+  /** Initial scroll percentage, default: 0 (must be between 0 and 1) */
+  initialScroll?: number
   enabled?: boolean
   style?: React.CSSProperties
   children: React.ReactNode
@@ -38,6 +40,7 @@ export type ScrollControlsState = {
   damping: number
   offset: number
   delta: number
+  scroll: React.MutableRefObject<number>
   pages: number
   range(from: number, distance: number, margin?: number): number
   curve(from: number, distance: number, margin?: number): number
@@ -59,6 +62,7 @@ export function ScrollControls({
   distance = 1,
   damping = 0.25,
   maxSpeed = Infinity,
+  initialScroll = 0,
   style = {},
   children,
 }: ScrollControlsProps) {
@@ -67,7 +71,7 @@ export function ScrollControls({
   const [fill] = React.useState(() => document.createElement('div'))
   const [fixed] = React.useState(() => document.createElement('div'))
   const target = gl.domElement.parentNode! as HTMLElement
-  const scroll = React.useRef(0)
+  const scroll = React.useRef(initialScroll)
 
   const state = React.useMemo(() => {
     const state = {
@@ -77,7 +81,7 @@ export function ScrollControls({
       fixed,
       horizontal,
       damping,
-      offset: 0,
+      offset: initialScroll,
       delta: 0,
       scroll,
       pages,
@@ -100,6 +104,12 @@ export function ScrollControls({
     }
     return state
   }, [eps, damping, horizontal, pages])
+
+  const getScrollDimensions = () => {
+    const containerLength = size[horizontal ? 'width' : 'height']
+    const scrollLength = el[horizontal ? 'scrollWidth' : 'scrollHeight']
+    return { scrollLength, scrollThreshold: scrollLength - containerLength }
+  }
 
   React.useEffect(() => {
     el.style.position = 'absolute'
@@ -128,8 +138,9 @@ export function ScrollControls({
     el.appendChild(fill)
     target.appendChild(el)
 
-    // Init scroll one pixel in to allow upward/leftward scroll
-    el[horizontal ? 'scrollLeft' : 'scrollTop'] = 1
+    // Initialize scroll
+    const { scrollThreshold } = getScrollDimensions()
+    el[horizontal ? 'scrollLeft' : 'scrollTop'] = initialScroll * scrollThreshold
 
     const oldTarget = (events.connected || gl.domElement) as HTMLElement
     requestAnimationFrame(() => events.connect?.(el))
@@ -154,9 +165,7 @@ export function ScrollControls({
 
   React.useEffect(() => {
     if (events.connected === el) {
-      const containerLength = size[horizontal ? 'width' : 'height']
-      const scrollLength = el[horizontal ? 'scrollWidth' : 'scrollHeight']
-      const scrollThreshold = scrollLength - containerLength
+      const { scrollLength, scrollThreshold } = getScrollDimensions()
 
       let current = 0
       let disableScroll = true
